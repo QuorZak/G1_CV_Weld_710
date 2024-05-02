@@ -5,6 +5,33 @@
 # Import libraries
 import cv2
 import numpy as np
+import os
+
+def read_images_from_folder(folder_path):
+    image_files = []
+    supported_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.gif']  # Add more extensions if needed
+
+    # Iterate over all files in the folder
+    for filename in os.listdir(folder_path):
+        # Check if the file has a supported image extension
+        if any(filename.lower().endswith(ext) for ext in supported_extensions):
+            # Form the full path of the image file
+            image_path = os.path.join(folder_path, filename)
+            # Add the image path to the list
+            image_files.append(image_path)
+
+    return image_files
+
+# Provide the path to the folder containing the images
+folder_path = 'D:\Sem 2024\Mecheng 710\WeldGapImages\Set 1'
+
+# Get the list of image files
+image_files_list = read_images_from_folder(folder_path)
+
+# Print the list of image files
+for image_file in image_files_list:
+    print(image_file)
+
 
 # Do all our work, step by step, in here
 def main():
