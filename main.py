@@ -7,6 +7,48 @@ import cv2
 import numpy as np
 import os
 
+
+# Do all our work, step by step, in here
+def main():
+    # Provide the path to the folder containing the images
+    folder_path = '\Set 1'
+
+    folder_name = "xxxx"
+    other_name1 = "xxxx"
+    other_name2 = "xxxx"
+    other_name3 = "xxxx"
+
+    bw_threshold_low = 120
+    bw_maxVal= 255
+
+    # 1) read folder content and store in a list
+    image_list = read_images_from_folder(folder_path)
+    
+
+    # 2) for each image in list
+    for image_name in image_list:
+        image = cv2.imread(image_name)
+
+
+    # 3) do lots of processing steps, including saving imtermediate steps
+    ret, thresh1 = cv2.threshold(image, bw_threshold_low, bw_maxVal, cv2.THRESH_BINARY)
+
+
+
+
+    # 4) store results in CSV + write final image
+
+    # 5) at the end of the loop, write the CSV
+
+
+if __name__ == "__main__":
+    main()
+
+
+#############################
+# Create all functions here
+#############################
+
 def read_images_from_folder(folder_path):
     image_files = []
     supported_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.gif']  # Add more extensions if needed
@@ -20,42 +62,13 @@ def read_images_from_folder(folder_path):
             # Add the image path to the list
             image_files.append(image_path)
 
+                # Print the list of image files
+    for image_file in image_files:
+        print(image_file)
+
     return image_files
 
-# Provide the path to the folder containing the images
-folder_path = 'D:\Sem 2024\Mecheng 710\WeldGapImages\Set 1'
-
-# Get the list of image files
-image_files_list = read_images_from_folder(folder_path)
-
-# Print the list of image files
-for image_file in image_files_list:
-    print(image_file)
 
 
-# Do all our work, step by step, in here
-def main():
-    folder_name = "xxxx"
-    other_name1 = "xxxx"
-    other_name2 = "xxxx"
-    other_name3 = "xxxx"
-
-    # 1) read folder content and store in a list
-    image_list = []
-    
-
-    # 2) for each image in list
-    for image_name in image_list:
-        image = cv2.imread(image_name)
 
 
-    # 3) do lots of processing steps, including saving imtermediate steps
-
-
-    # 4) store results in CSV + write final image
-
-    # 5) at the end of the loop, write the CSV
-
-
-if __name__ == "__main__":
-    main()
