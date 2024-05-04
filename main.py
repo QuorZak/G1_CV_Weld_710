@@ -27,7 +27,12 @@ def main():
 
     # 2) for each image in list
     for image_name in image_list:
-        image = cv2.imread(image_name)
+         # Convert the image to black and white
+    bw_image = convert_to_black_and_white(image_file)
+    # Display the black and white image (optional)
+    cv2.imshow('Black and White Image', bw_image)
+    cv2.waitKey(0)  # Wait for any key press to continue to the next image
+        #image = cv2.imread(image_name)
 
 
     # 3) do lots of processing steps, including saving imtermediate steps
@@ -68,7 +73,14 @@ def read_images_from_folder(folder_path):
 
     return image_files
 
+def convert_to_black_and_white(image_path):
+    # Read the image
+    image = cv2.imread(image_path)
+    # Convert the image to grayscale
+    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    return gray_image
 
 
+cv2.destroyAllWindows()
 
 
