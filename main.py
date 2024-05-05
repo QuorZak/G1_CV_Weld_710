@@ -44,35 +44,44 @@ cv2.destroyAllWindows()
 # Do all our work, step by step, in here
 def main():
     # Provide the path to the folder containing the images
-    folder_path = '\Set 1'
+    folder_path = 'D:\Sem 2024\Mecheng 710\CV_Project\G1_CV_Weld_710\WeldGapImages\Set 1'
+
+    bw_threshold_low = 120
+    bw_maxVal = 255
 
     folder_name = "xxxx"
     other_name1 = "xxxx"
     other_name2 = "xxxx"
     other_name3 = "xxxx"
 
-    bw_threshold_low = 120
-    bw_maxVal= 255
+
 
     # 1) read folder content and store in a list
     image_list = read_images_from_folder(folder_path)
     
-
+    save_counter = 0
     # 2) for each image in list
     for image_name in image_list:
          # Convert the image to black and white
         bw_image = convert_to_black_and_white(image_name)
     # Display the black and white image (optional)
-        cv2.imshow('Black and White Image', bw_image)
-        cv2.waitKey(0)  # Wait for any key press to continue to the next image
-        #image = cv2.imread(image_name)
-
-
     # 3) do lots of processing steps, including saving imtermediate steps
     #ret, thresh1 = cv2.threshold(image, bw_threshold_low, bw_maxVal, cv2.THRESH_BINARY)
+        ret, thresh = cv2.threshold(bw_image, bw_threshold_low, bw_maxVal, cv2.THRESH_TOZERO)
 
 
+        if save_counter < 3:  # Change the number to the desired amount of images to save
+            save_path = f"bw_image_{save_counter}.png"  # You can change the file format if needed
+            cv2.imwrite(save_path, thresh)
+            print(f"Saved image: {save_path}")
+            save_counter += 1
+        else:
+            break  # Exit the loop once the desired number of images have been saved
+    
+    cv2.imshow('Zero Threshold', thresh)
+    cv2.waitKey(0)  # Wait for any key press to continue to the next image
 
+    
 
     # 4) store results in CSV + write final image
 
