@@ -38,6 +38,7 @@ def convert_to_black_and_white(image_path):
     return gray_image
 
 
+
 cv2.destroyAllWindows()
 
 
@@ -59,7 +60,9 @@ def main():
     # 1) read folder content and store in a list
     image_list = read_images_from_folder(folder_path)
     
-    save_counter = 0
+    save_counter_bw = 0
+    save_counter_cropped = 0
+    save_counter_edge = 0
     # 2) for each image in list
     for image_name in image_list:
          # Convert the image to black and white
@@ -69,17 +72,56 @@ def main():
     #ret, thresh1 = cv2.threshold(image, bw_threshold_low, bw_maxVal, cv2.THRESH_BINARY)
         ret, thresh = cv2.threshold(bw_image, bw_threshold_low, bw_maxVal, cv2.THRESH_TOZERO)
 
+        line_color = (120, 255, 0)  # Green color in BGR format
+        thickness = 2
+        cv2.line(thresh, (0, 70), (thresh.shape[1], 70), line_color, thickness)
 
-        if save_counter < 3:  # Change the number to the desired amount of images to save
-            save_path = f"bw_image_{save_counter}.png"  # You can change the file format if needed
-            cv2.imwrite(save_path, thresh)
-            print(f"Saved image: {save_path}")
-            save_counter += 1
-        else:
+        mid_point = (int(thresh.shape[1]/2), 70)
+
+        width_ROI = 1000
+        height_ROI = 300
+        x_ROI = max(mid_point[0] - width_ROI // 2, 0)
+        y_ROI = max(mid_point[1] - height_ROI // 2, 0)
+        cropped_image = thresh[y_ROI:y_ROI + height_ROI, x_ROI:x_ROI + width_ROI]
+
+        t_lower = 500 # Lower Threshold
+        t_upper = 850 # Upper threshold
+
+        edge = cv2.Canny(cropped_image, t_lower, t_upper)
+
+        cv2.imshow('zero_threshold', thresh)
+        cv2.waitKey(0)  # Wait for any key press to continue to the next image
+        
+
+
+        if save_counter_bw < 3:  # Change the number to the desired amount of images to save
+            save_path_bw = f"bw_image_{save_counter_bw}.png"  # You can change the file format if needed
+            cv2.imwrite(save_path_bw, thresh)
+            print(f"Saved BW image: {save_path_bw}")
+            save_counter_bw += 1
+
+        cv2.imshow('cropped_image', cropped_image)
+        cv2.waitKey(0)  # Wait for any key press to continue to the next image
+
+        if save_counter_cropped < 3:  # Change the number to the desired amount of images to save
+            save_path_cropped = f"cropped_image_{save_counter_cropped}.png"  # You can change the file format if needed
+            cv2.imwrite(save_path_cropped, cropped_image)
+            print(f"Saved cropped image: {save_path_cropped}")
+            save_counter_cropped += 1
+
+        cv2.imshow('Edge', edge)
+        cv2.waitKey(0)  # Wait for any key press to continue to the next image
+
+        if save_counter_edge < 3:  # Change the number to the desired amount of images to save
+            save_path_edge = f"cropped_image_{save_counter_edge}.png"  # You can change the file format if needed
+            cv2.imwrite(save_path_edge, edge)
+            print(f"Edge detected image: {save_path_edge}")
+            save_counter_edge += 1        
+
+        
+        if save_counter_bw >= 3 and save_counter_cropped >=3 and save_counter_edge >=3:
             break  # Exit the loop once the desired number of images have been saved
     
-    cv2.imshow('Zero Threshold', thresh)
-    cv2.waitKey(0)  # Wait for any key press to continue to the next image
 
     
 
@@ -90,7 +132,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
