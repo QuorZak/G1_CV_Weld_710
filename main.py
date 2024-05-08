@@ -197,7 +197,7 @@ def main():
 
     image_results = []
 
-    source_folder_path = 'WeldGapImages/Set 3'
+    source_folder_path = 'WeldGapImages/Set 1'
     interim_folder_path = 'InterimResults/'
     csv_filename = 'WeldGapPositions.csv'
 
@@ -215,7 +215,7 @@ def main():
     canny_thresh_lower = 100 #set1 = 100
     canny_thresh_upper = 200 #set1 = 200
 
-    show = True
+    show = False
 
     # 1) set up the interim folder then read source folder content  
     image_list = read_images_from_folder(source_folder_path)
@@ -227,20 +227,18 @@ def main():
          # Convert the image to black and white
         initial_image = read_image(image_name, read_type1)
         
-
     # 2a) scan the zone around the line to get the image average values and try to adjust thresholds
         cropped = crop_roi(initial_image)
+        grey_image = cv2.cvtColor(cropped, read_type2)
 
-        thresh1_low, thresh1_maxVal, thresh2_low, thresh2_maxVal = adjust_thresholds(cropped, thresh1_low, thresh1_maxVal, thresh2_low, thresh2_maxVal)
+        #thresh1_low, thresh1_maxVal, thresh2_low, thresh2_maxVal = adjust_thresholds(grey_image, thresh1_low, thresh1_maxVal, thresh2_low, thresh2_maxVal)
         
     # 3) do lots of processing steps, including saving interim steps
-        ret, thresh1 = cv2.threshold(cropped, thresh1_low, thresh1_maxVal, thresh_type1)
+        ret, thresh1 = cv2.threshold(grey_image, thresh1_low, thresh1_maxVal, thresh_type1)
 
         gauss = cv2.GaussianBlur(thresh1, (5, 5), 0)
 
-        grey_image = cv2.cvtColor(thresh1, read_type2)
-
-        ret, thresh2 = cv2.threshold(grey_image, thresh2_low, thresh2_maxVal, thresh_type2)
+        ret, thresh2 = cv2.threshold(gauss, thresh2_low, thresh2_maxVal, thresh_type2)
 
         edge = cv2.Canny(thresh2, canny_thresh_lower, canny_thresh_upper)
 
@@ -267,7 +265,7 @@ def main():
         valid = 0
         if len(center_positions) > 0:
             #weld_center = center_from_canny_pairs(edge, center_positions)
-            weld_center = center_from_darkest_pixel_and_height(thresh2, center_positions)
+            weld_center = center_from_darkest_pixel_and_height(thresh1, center_positions)
             if weld_center[0] != -1:
                 draw_center_line(cropped, weld_center)
                 valid = 1            
