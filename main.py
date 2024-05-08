@@ -6,7 +6,6 @@
 import cv2
 import numpy as np
 import os
-import csv
 
 #############################
 # Create all functions here
@@ -46,7 +45,7 @@ cv2.destroyAllWindows()
 # Do all our work, step by step, in here
 def main():
     # Provide the path to the folder containing the images
-    folder_path = 'C:\Users\inpal\OneDrive\Desktop\G1_CV_Weld_710\WeldGapImages\Set 1'
+    folder_path = 'D:\Sem 2024\Mecheng 710\CV_Project\G1_CV_Weld_710\WeldGapImages\Set 1'
 
     bw_threshold_low = 120
     bw_maxVal = 255
@@ -114,7 +113,7 @@ def main():
         cv2.waitKey(0)  # Wait for any key press to continue to the next image
 
         if save_counter_edge < 3:  # Change the number to the desired amount of images to save
-            save_path_edge = f"cropped_image_{save_counter_edge}.png"  # You can change the file format if needed ##JPG-Requirement ##Cropped_image/Image
+            save_path_edge = f"cropped_image_{save_counter_edge}.png"  # You can change the file format if needed
             cv2.imwrite(save_path_edge, edge)
             print(f"Edge detected image: {save_path_edge}")
             save_counter_edge += 1        
@@ -129,19 +128,6 @@ def main():
     # 4) store results in CSV + write final image
 
     # 5) at the end of the loop, write the CSV
-
-    
-        saved = []#initalising a list to save the data
-        saved.append(save_path_edge,__)#insert weld gap position in pixel value
-        if saved[1] > 0:
-            saved.append(1)#Valid
-        else:
-            saved.append(0)#Invalid
-        data = [saved]#data needs to be in an inner list to feed into CSV file
-        with open('example.csv', 'w') as file:
-            csv_writer = csv.writer(file)#initialising a writer object
-            csv_writer.writerows(data)#inputting the data as each row into an table in the csv file
-
 
 
 if __name__ == "__main__":
