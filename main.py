@@ -6,6 +6,7 @@
 import cv2
 import numpy as np
 import os
+import csv
 
 #############################
 # Create all functions here
@@ -46,7 +47,7 @@ def crop_roi(image, width_ROI = 1000, height_ROI = 300):
 
 def abs_to_cropped_coords(image, coords):
     width_ROI = 1000
-    height_ROI = 300
+    #height_ROI = 300
 
     mid_point = (int(image.shape[1]/2), 300)
     x_roi = max(mid_point[0] - width_ROI // 2, 0)
@@ -55,17 +56,10 @@ def abs_to_cropped_coords(image, coords):
         new_coords.append(coord[0]-x_roi, coord[1], coord[2])
     return new_coords
 
-<<<<<<< HEAD
-# Do all our work, step by step, in here
-def main():
-    # Provide the path to the folder containing the images
-    folder_path = 'D:\Sem 2024\Mecheng 710\CV_Project\G1_CV_Weld_710\WeldGapImages\Set 1'
-=======
 def save_interim_images(image_array=[], total_image_count=1, folder_path='InterimResults/'):
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
     os.chdir(folder_path)
->>>>>>> a535defacccc95c2f11198a09d4038657a06b9c4
 
     for interim_count, image in enumerate(image_array):
         name_string = f"Image{total_image_count:04}_B_InterimResult{interim_count+1}.jpg"
@@ -79,7 +73,7 @@ def get_canny_line_centers(image, max_gap, y_location=70):
         found_gap = False
         in_white_line = False
         for x_index, pixel_value in enumerate(image[y_location,:]): #just one scan line across y=70
-            if pixel_value > 250:  # find white lines
+            if pixel_value > 255:  # find white lines
                 if begin_count == 0 and not in_white_line:
                     begin_count = x_index
                     in_white_line = True
@@ -101,19 +95,19 @@ def get_canny_line_centers(image, max_gap, y_location=70):
         return x_positions
 
 def center_from_canny_pairs(edge, centers):
-    best_center = (-1,-1,-1)
+    best_center = (-1, -1, -1)
     best_count = 0
-    for x,y,w in centers:
+    for x, y, w in centers:
         count = 0
-        current_x, current_y = x,y
+        current_x, current_y = x, y
 
-        while edge[int(current_x),int(current_y)] < 250 and current_y > 0:
+        while edge[int(current_x),int(current_y)] < 255 and current_y > 0:
             count += 1
             current_y -= 1
 
         if count > best_count:
             best_count = count
-            best_center = (int(x),int(y),int(w))
+            best_center = (int(x), int(y), int(w))
 
     return best_center
 
@@ -126,9 +120,9 @@ def draw_center_line(array, weld_center):
     cv2.line(array, (weld_center[0]-(weld_center[2]/2), weld_center[1]), (weld_center[0]+(weld_center[2]/2), weld_center[1]), line_color, thickness=2)
 
 def write_csv(write_list, csv_filename):
-    with open(csv_filename, 'w', newline='') as csv:
-        csv_writer = csv.writer(csv) #initialising a writer object
-        csv_writer.writerows(write_list) #inputting the data as each row into an table in the csv file
+    with open(csv_filename, 'w', newline='') as csv_file:
+        csv_writer = csv.writer(csv_file) #initialising a writer object
+        csv_writer.writerow(write_list) #inputting the data as each row into an table in the csv file
     
 
 ###########################################
@@ -163,6 +157,8 @@ def main():
 
     # 1) set up the interim folder then read source folder content  
     image_list = read_images_from_folder(source_folder_path)
+
+    image_results = []
     
     # 2) for each image in list
     for current_image_index, image_name in enumerate(image_list, start=1):
@@ -191,18 +187,9 @@ def main():
         save_interim_images(interim_images, current_image_index, interim_folder_path)
     
 
-<<<<<<< HEAD
-        if save_counter_edge < 3:  # Change the number to the desired amount of images to save
-            save_path_edge = f"cropped_image_{save_counter_edge}.png"  # You can change the file format if needed
-            cv2.imwrite(save_path_edge, edge)
-            print(f"Edge detected image: {save_path_edge}")
-            save_counter_edge += 1        
-
-=======
     # 5) detect and collect the weld gap x coordinates
-        center_positions = get_canny_line_centers(edge, max_weld_gap, y_scan_location)
->>>>>>> a535defacccc95c2f11198a09d4038657a06b9c4
-        
+        center_positions = get_canny_line_centers(edge, max_weld_gap, y_scan_location)   
+
         weld_center = -1
         valid = 0
         if len(center_positions) > 0:
@@ -211,19 +198,11 @@ def main():
                 draw_center_line(cropped, weld_center)
                 valid = 1            
         
-        image_results = image_results.append[f"Image{current_image_index:04}.jpg,{weld_center[0]},{valid}"] # format the results entry
+        image_results.append(f"Image{current_image_index:04}.jpg,{weld_center},{valid}") # format the results entry
 
-<<<<<<< HEAD
-    
 
-    # 4) store results in CSV + write final image
-
-    # 5) at the end of the loop, write the CSV
-=======
     # 6) at the end of the loop, write the CSV
         write_csv(image_results, csv_filename)
-
->>>>>>> a535defacccc95c2f11198a09d4038657a06b9c4
 
 
 if __name__ == "__main__":
