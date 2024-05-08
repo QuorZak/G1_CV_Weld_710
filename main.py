@@ -45,36 +45,26 @@ def crop_roi(image, width_ROI = 1000, height_ROI = 300):
         y_roi = max(mid_point[1] - height_ROI // 2, 0)
         return image[y_roi:y_roi + height_ROI, x_roi:x_roi + width_ROI]
 
-def adjust_thresholds(cropped, thresh1_low, thresh1_maxVal, thresh2_low, thresh2_maxVal):
+def adjust_thresholds(cropped, thresh1_low, thresh2_low):
     avg_brightness = np.mean(cropped)
     
-    if avg_brightness > 200:  # Image is very bright
-        thresh1_low += 30
-        thresh1_maxVal -= 30
-        thresh2_low += 30
-        thresh2_maxVal -= 30
-    elif avg_brightness > 170:  # Image is bright
-        thresh1_low += 10
-        thresh1_maxVal -= 10
+    if avg_brightness > 220:  # Image is very bright
+        thresh1_low += 60
+        thresh2_low += 45
+    elif avg_brightness > 180:  # Image is bright
+        thresh1_low += 20
         thresh2_low += 10
-        thresh2_maxVal -= 10
     elif avg_brightness < 100:  # Image is dim
-        thresh1_low -= 10
-        thresh1_maxVal += 10
-        thresh2_low -= 10
-        thresh2_maxVal += 10
-    elif avg_brightness < 70:  # Image is very dim
-        thresh1_low -= 30
-        thresh1_maxVal += 30
-        thresh2_low -= 30
-        thresh2_maxVal += 30
+        thresh1_low -= 15
+        thresh2_low -= 15
+    elif avg_brightness < 50:  # Image is very dim
+        thresh1_low -= 40
+        thresh2_low -= 40
 
-    thresh1_low = max(0, min(255, thresh1_low))
-    thresh1_maxVal = max(0, min(255, thresh1_maxVal))
-    thresh2_low = max(0, min(255, thresh2_low))
-    thresh2_maxVal = max(0, min(255, thresh2_maxVal))
+    thresh1_low = max(0, thresh1_low)
+    thresh2_low = max(0, thresh2_low)
 
-    return thresh1_low, thresh1_maxVal, thresh2_low, thresh2_maxVal
+    return thresh1_low, thresh2_low
 
 def abs_to_cropped_coords(image, coords):
     width_ROI = 1000
@@ -151,7 +141,7 @@ def center_from_darkest_pixel_and_height(edge, centers):
         current_x, current_y = x, y
         current_pixel = edge[int(current_y),int(current_x)] # array access is y then x
 
-        while current_pixel <= 200 and current_y > 0:
+        while current_pixel <= 220 and current_y > 0:
             count += 1
             current_y -= 1
 
@@ -194,10 +184,11 @@ def main():
     pixel_width = 0.04607 # mm / pixel
 
     y_scan_location = 70
+    roi_width, roi_height = 750, 150
 
     image_results = []
 
-    source_folder_path = 'WeldGapImages/Set 1'
+    source_folder_path = 'WeldGapImages/Set 3'
     interim_folder_path = 'InterimResults/'
     csv_filename = 'WeldGapPositions.csv'
 
@@ -205,12 +196,10 @@ def main():
     read_type2 = cv2.COLOR_BGR2GRAY
 
     thresh_type1 = cv2.THRESH_TRUNC
-    thresh1_low = 120 #set1 = 120
-    thresh1_maxVal = 240 #set1 = 240
+    thresh1_low, thresh1_maxVal = 120, 250 #set1 = 120, 250
 
     thresh_type2 = cv2.THRESH_BINARY
-    thresh2_low = 90 #set1 = 90
-    thresh2_maxVal = 240 #set1 = 240
+    thresh2_low, thresh2_maxVal = 90, 250 #set1 = 90, 250
 
     canny_thresh_lower = 100 #set1 = 100
     canny_thresh_upper = 200 #set1 = 200
@@ -228,10 +217,10 @@ def main():
         initial_image = read_image(image_name, read_type1)
         
     # 2a) scan the zone around the line to get the image average values and try to adjust thresholds
-        cropped = crop_roi(initial_image)
+        cropped = crop_roi(initial_image, roi_width, roi_height)
         grey_image = cv2.cvtColor(cropped, read_type2)
 
-        #thresh1_low, thresh1_maxVal, thresh2_low, thresh2_maxVal = adjust_thresholds(grey_image, thresh1_low, thresh1_maxVal, thresh2_low, thresh2_maxVal)
+        thresh1_low, thresh2_low = adjust_thresholds(grey_image, thresh1_low, thresh2_low)
         
     # 3) do lots of processing steps, including saving interim steps
         ret, thresh1 = cv2.threshold(grey_image, thresh1_low, thresh1_maxVal, thresh_type1)
