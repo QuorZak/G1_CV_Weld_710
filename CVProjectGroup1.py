@@ -49,9 +49,9 @@ def adjust_thresholds(cropped, thresh1_low, thresh2_low):
     avg_brightness = np.mean(cropped)
     
     if avg_brightness > 220:  # Image is very bright
-        thresh1_low += 50
-        thresh2_low += 30
-    elif avg_brightness > 170:  # Image is bright
+        thresh1_low += 30
+        thresh2_low += 20
+    elif avg_brightness > 180:  # Image is bright
         thresh1_low += 20
         thresh2_low += 10
     elif avg_brightness < 100:  # Image is dim
@@ -143,7 +143,7 @@ def check_for_hough_cluster(lines, width_thresh=12):
         return -1
     
 
-def get_canny_line_centers(image, max_gap, y_location=70):
+def get_canny_line_centers(image, max_gap, lines, y_location=70):
         x_positions = []
         begin_count = 0
         found_gap = False
@@ -156,8 +156,9 @@ def get_canny_line_centers(image, max_gap, y_location=70):
                 elif found_gap == False:
                     pass
                 else:
-                    if (x_index-begin_count <= max_gap) and (x_index-begin_count > 1):
-                        x_positions.append(((int(begin_count+x_index)/2),int(y_location),int(x_index-begin_count)))
+                    x_average = int(int(begin_count+x_index)/2)
+                    if (x_index-begin_count <= max_gap) and (x_index-begin_count > 1) and if_near_hought(x_average, lines):
+                        x_positions.append((x_average,int(y_location),int(x_index-begin_count)))
                     begin_count = 0
                     found_gap = False
                     in_white_line = True
@@ -169,6 +170,16 @@ def get_canny_line_centers(image, max_gap, y_location=70):
                     in_white_line = False
 
         return x_positions
+
+def if_near_hought(x, lines):
+    if lines is not None and len(lines) > 0:
+        for line in lines:
+            x1, y1, x2, y2 = line[0],line[1],line[2],line[3]
+            diff = int(abs(x-((x1+x2)/2)))
+            if (diff < 10):
+                return True
+    return False
+
 
 def center_from_canny_pairs(edge, centers):
     best_center = (-1, -1, -1)
@@ -231,8 +242,8 @@ def draw_center_line(array, weld_center):
 
 def write_csv(write_list, csv_filename):
     with open(csv_filename, 'w', newline='') as csv_file:
-        csv_writer = csv.writer(csv_file) #initialising a writer object
-        csv_writer.writerow(write_list) #inputting the data as each row into an table in the csv file
+        for item in write_list:
+            csv_file.write(item + '\n')
 
 def save_final_image(image, total_image_count, folder_path='InterimResults/'):
     if not os.path.exists(folder_path):
@@ -257,7 +268,7 @@ def main():
 
     image_results = []
 
-    source_folder_path = 'WeldGapImages/Set 1'
+    source_folder_path = 'WeldGapImages/Set 3'
     interim_folder_path = 'InterimResults/'
     csv_filename = 'WeldGapPositions.csv'
 
@@ -268,13 +279,13 @@ def main():
     thresh1_low, thresh1_maxVal = 120, 250 #set1 = 120, 250
 
     thresh_type2 = cv2.THRESH_BINARY
-    thresh2_low, thresh2_maxVal = 90, 250 #set1 = 90, 250
+    thresh2_low, thresh2_maxVal = 75, 250 #set1 = 75, 250
 
-    canny1_thresh_lower = 150 #set1 = 100 - not for hough
-    canny1_thresh_upper = 250 #set1 = 200 - not for hough
+    canny1_thresh_lower = 150 #set1 = 150 - not for hough - binary
+    canny1_thresh_upper = 250 #set1 = 250 - not for hough - binary
 
-    canny2_thresh_lower = 150 #set1 = 100
-    canny2_thresh_upper = 250 #set1 = 200
+    canny2_thresh_lower = 150 #set1 = 150
+    canny2_thresh_upper = 250 #set1 = 250
 
     show = False
 
@@ -298,31 +309,31 @@ def main():
         thresh1_low, thresh2_low = adjust_thresholds(grey_image, thresh1_low, thresh2_low)
         
     # 3) do lots of processing steps, including saving interim steps
-        gauss = cv2.GaussianBlur(grey_image, (5, 5), 0)
+        gauss = cv2.GaussianBlur(grey_image, (7, 7), 0)
 
         clahe_param = cv2.createCLAHE(clipLimit=1.0, tileGridSize=(10, 10))
         contrast = clahe_param.apply(gauss)
 
-        grouped = group_by_contrast(contrast)
+        grouped = group_by_contrast(gauss)
 
         edge2 = cv2.Canny(grouped, canny2_thresh_lower, canny2_thresh_upper)
 
-        lines = cv2.HoughLinesP(edge2, 1, np.pi/180, 50, None, 40, 12)
-        saved_lines = draw_hough_lines(grey_copy, lines)
-
         #ret, thresh1 = cv2.threshold(grouped, thresh1_low, thresh1_maxVal, thresh_type1) # trunc - currently redundant
 
-        ret, thresh2 = cv2.threshold(contrast, thresh2_low, thresh2_maxVal, thresh_type2) # binary
+        ret, thresh2 = cv2.threshold(contrast, contrast.min()+(thresh2_low/3), thresh2_maxVal, thresh_type2) # binary
 
         edge1 = cv2.Canny(thresh2, canny1_thresh_lower, canny1_thresh_upper)
-     
-        interim_images = [contrast, thresh2, edge1, edge2, grey_copy]
+
+        lines = cv2.HoughLinesP(edge1, 1, np.pi/180, 50, None, 40, 12)
+        saved_lines = draw_hough_lines(grey_copy, lines)
+
+        interim_images = [contrast, thresh2, edge1, grouped, edge2, grey_copy]
         save_interim_images(interim_images, current_image_index, interim_folder_path)
 
     # 5) detect and collect the weld gap x coordinates
         valid1 = 0
         weld_center1 = (-1,-1,-1) #(x,y,width)
-        center_positions1 = get_canny_line_centers(edge1, max_weld_gap, y_scan_location)   
+        center_positions1 = get_canny_line_centers(edge1, max_weld_gap, saved_lines, y_scan_location) #binary  
         if len(center_positions1) > 0:
             #weld_center = center_from_canny_pairs(edge, center_positions)
             weld_center1 = center_from_darkest_pixel_and_height(contrast, center_positions1)
@@ -332,7 +343,7 @@ def main():
         if using_edge2:
             valid2 = 0
             weld_center2 = -1
-            center_positions2 = get_canny_line_centers(edge2, max_weld_gap, y_scan_location)   
+            center_positions2 = get_canny_line_centers(edge2, max_weld_gap, saved_lines, y_scan_location) #groups
             if len(center_positions2) > 0:
                 weld_center2 = center_from_darkest_pixel_and_height(contrast, center_positions2) # use gauss or thresh1
                 if weld_center2[0] != -1:
