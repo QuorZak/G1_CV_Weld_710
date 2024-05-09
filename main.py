@@ -66,6 +66,18 @@ def adjust_thresholds(cropped, thresh1_low, thresh2_low):
 
     return thresh1_low, thresh2_low
 
+def group_by_contrast(image):
+    thresholds = [51, 102, 153, 204] 
+    result = np.zeros_like(image)
+    
+    # Assigning new values based on thresholds
+    result[image <= thresholds[0]] = 0
+    result[(image > thresholds[0]) & (image <= thresholds[1])] = 51
+    result[(image > thresholds[1]) & (image <= thresholds[2])] = 102
+    result[(image > thresholds[2]) & (image <= thresholds[3])] = 153
+    result[image > thresholds[3]] = 204
+    return result
+
 def abs_to_cropped_coords(image, coords):
     width_ROI = 1000
     #height_ROI = 300
@@ -188,7 +200,7 @@ def main():
 
     image_results = []
 
-    source_folder_path = 'WeldGapImages/Set 3'
+    source_folder_path = 'WeldGapImages/Set 2'
     interim_folder_path = 'InterimResults/'
     csv_filename = 'WeldGapPositions.csv'
 
@@ -201,12 +213,17 @@ def main():
     thresh_type2 = cv2.THRESH_BINARY
     thresh2_low, thresh2_maxVal = 90, 250 #set1 = 90, 250
 
-    canny_thresh_lower = 100 #set1 = 100
-    canny_thresh_upper = 200 #set1 = 200
+    canny1_thresh_lower = 100 #set1 = 100
+    canny1_thresh_upper = 200 #set1 = 200
+
+    canny2_thresh_lower = 100 #set1 = 100
+    canny2_thresh_upper = 200 #set1 = 200
 
     show = False
 
-    # 1) set up the interim folder then read source folder content  
+    using_edge2 = True
+
+    # # 1) set up the interim folder then read source folder content  
     image_list = read_images_from_folder(source_folder_path)
 
     image_results = []
@@ -223,48 +240,63 @@ def main():
         thresh1_low, thresh2_low = adjust_thresholds(grey_image, thresh1_low, thresh2_low)
         
     # 3) do lots of processing steps, including saving interim steps
-        ret, thresh1 = cv2.threshold(grey_image, thresh1_low, thresh1_maxVal, thresh_type1)
+        gauss = cv2.GaussianBlur(grey_image, (5, 5), 0)
 
-        gauss = cv2.GaussianBlur(thresh1, (5, 5), 0)
+        grouped = group_by_contrast(gauss)
 
-        ret, thresh2 = cv2.threshold(gauss, thresh2_low, thresh2_maxVal, thresh_type2)
+        #ret, thresh1 = cv2.threshold(grouped, thresh1_low, thresh1_maxVal, thresh_type1) # trunc - currently redundant
 
-        edge = cv2.Canny(thresh2, canny_thresh_lower, canny_thresh_upper)
+        ret, thresh2 = cv2.threshold(grouped, thresh2_low, thresh2_maxVal, thresh_type2) # binary
+
+        edge1 = cv2.Canny(thresh2, canny1_thresh_lower, canny1_thresh_upper)
+        edge2 = cv2.Canny(grouped, canny2_thresh_lower, canny2_thresh_upper)
+
+        hough1 = cv2.HoughLinesP()
+     
+        interim_images = [grouped, thresh2, edge1, edge2]
+        save_interim_images(interim_images, current_image_index, interim_folder_path)
+
+    # 5) detect and collect the weld gap x coordinates
+        valid1 = 0
+        weld_center1 = -1
+        center_positions1 = get_canny_line_centers(edge1, max_weld_gap, y_scan_location)   
+        if len(center_positions1) > 0:
+            #weld_center = center_from_canny_pairs(edge, center_positions)
+            weld_center1 = center_from_darkest_pixel_and_height(gauss, center_positions1)
+            if weld_center1[0] != -1:
+                valid1 = 1
+
+        if using_edge2:
+            valid2 = 0
+            weld_center2 = -1
+            center_positions2 = get_canny_line_centers(edge2, max_weld_gap, y_scan_location)   
+            if len(center_positions2) > 0:
+                weld_center2 = center_from_darkest_pixel_and_height(gauss, center_positions2) # use gauss or thresh1
+                if weld_center2[0] != -1:
+                    valid2 = 1
+                
+        if valid1:
+            draw_center_line(cropped, weld_center1)
+            image_results.append(f"Image{current_image_index:04}.jpg,{weld_center1},{valid1}") # format the results entry
+        elif valid2:
+            draw_center_line(cropped, weld_center2)
+            image_results.append(f"Image{current_image_index:04}.jpg,{weld_center2},{valid2}")
+        else:
+            image_results.append(f"Image{current_image_index:04}.jpg,{weld_center1},{valid1}")
+
+    # 6) at the end of the loop, write the CSV and final image
+        write_csv(image_results, csv_filename)
+        save_final_image(cropped, current_image_index, interim_folder_path)
 
         if show == True:
             cv2.imshow('threshold type 1', thresh1)
             cv2.waitKey(0)  # Wait for any key press to continue to the next image
 
-            cv2.imshow('gauss', gauss)
-            cv2.waitKey(0)  # Wait for any key press to continue to the next image
-
             cv2.imshow('threshold type 2', thresh2)
             cv2.waitKey(0)  # Wait for any key press to continue to the next image
 
-            cv2.imshow('Edge', edge)
+            cv2.imshow('Edge', edge1)
             cv2.waitKey(0)  # Wait for any key press to continue to the next image
-     
-        interim_images = [thresh1, gauss, thresh2, edge]
-        save_interim_images(interim_images, current_image_index, interim_folder_path)
-
-    # 5) detect and collect the weld gap x coordinates
-        center_positions = get_canny_line_centers(edge, max_weld_gap, y_scan_location)   
-
-        weld_center = -1
-        valid = 0
-        if len(center_positions) > 0:
-            #weld_center = center_from_canny_pairs(edge, center_positions)
-            weld_center = center_from_darkest_pixel_and_height(thresh1, center_positions)
-            if weld_center[0] != -1:
-                draw_center_line(cropped, weld_center)
-                valid = 1            
-        
-        image_results.append(f"Image{current_image_index:04}.jpg,{weld_center},{valid}") # format the results entry
-
-
-    # 6) at the end of the loop, write the CSV and final image
-        write_csv(image_results, csv_filename)
-        save_final_image(cropped, current_image_index, interim_folder_path)
 
 
 if __name__ == "__main__":
