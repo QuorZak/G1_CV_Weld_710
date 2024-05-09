@@ -47,7 +47,7 @@ def crop_roi(image, width_ROI = 1000, height_ROI = 300):
 
 def adjust_thresholds(cropped, thresh1_low, thresh2_low):
     avg_brightness = np.mean(cropped)
-    
+    # Set2 = 60,45,20,10,15,15,40,40
     if avg_brightness > 220:  # Image is very bright
         thresh1_low += 60
         thresh2_low += 45
@@ -132,14 +132,14 @@ def center_from_canny_pairs(edge, centers):
 
     return best_center
 
-def center_from_darkest_pixel_and_height(edge, centers):
+def center_from_darkest_pixel_and_height(thresh1, centers):
     best_center = (-1, -1, -1)
     darkest_line = 255
     min_count = 10
     for x, y, w in centers:
         count = 0
         current_x, current_y = x, y
-        current_pixel = edge[int(current_y),int(current_x)] # array access is y then x
+        current_pixel = thresh1[int(current_y),int(current_x)] # array access is y then x
 
         while current_pixel <= 220 and current_y > 0:
             count += 1
@@ -184,7 +184,7 @@ def main():
     pixel_width = 0.04607 # mm / pixel
 
     y_scan_location = 70
-    roi_width, roi_height = 750, 150
+    roi_width, roi_height = 750, 140
 
     image_results = []
 
@@ -206,6 +206,8 @@ def main():
 
     show = False
 
+    sobel = True
+
     # 1) set up the interim folder then read source folder content  
     image_list = read_images_from_folder(source_folder_path)
 
@@ -215,36 +217,80 @@ def main():
     for current_image_index, image_name in enumerate(image_list, start=1):
          # Convert the image to black and white
         initial_image = read_image(image_name, read_type1)
-        
+
     # 2a) scan the zone around the line to get the image average values and try to adjust thresholds
         cropped = crop_roi(initial_image, roi_width, roi_height)
         grey_image = cv2.cvtColor(cropped, read_type2)
+        grey_copy = np.copy(grey_image)
+        sobel_grey_copy = np.copy(grey_image)
 
+        # also consider cv2.adaptive_tresholding()
         thresh1_low, thresh2_low = adjust_thresholds(grey_image, thresh1_low, thresh2_low)
         
     # 3) do lots of processing steps, including saving interim steps
-        ret, thresh1 = cv2.threshold(grey_image, thresh1_low, thresh1_maxVal, thresh_type1)
+        ret, thresh1 = cv2.threshold(grey_image, thresh1_low, thresh1_maxVal, thresh_type1) # trunc
 
-        gauss = cv2.GaussianBlur(thresh1, (5, 5), 0)
+        if sobel == True:
+            sobel_x = cv2.Sobel(grey_image, cv2.CV_64F, 1, 0, ksize=3)
+    
+            # Convert to absolute values
+            abs_sobel_x = cv2.convertScaleAbs(sobel_x)
 
-        ret, thresh2 = cv2.threshold(gauss, thresh2_low, thresh2_maxVal, thresh_type2)
+            # Thresholding to isolate strong vertical edges
+            ret, sobel_vert = cv2.threshold(abs_sobel_x, 200, 255, cv2.THRESH_BINARY)
+            sobel_hough = cv2.HoughLinesP(sobel_vert, 1, np.pi/180, 70, None, 20, 12)
 
+            sobel_saved_lines = []
+            # draw sobel hough lines
+            if sobel_hough is not None and len(sobel_hough) > 0:
+                min_angle = 85  # 90 - 5
+                max_angle = 95  # 90 + 5
+                for line in sobel_hough:
+                    x1, y1, x2, y2 = line[0]
+                    theta_degrees = np.arctan2(y2 - y1, x2 - x1) * 180 / np.pi
+                    if min_angle <= abs(theta_degrees) <= max_angle:
+                        lin = line[0]
+                        sobel_saved_lines = line
+                        cv2.line(sobel_grey_copy, (lin[0], lin[1]), (lin[2], lin[3]), (0,0,255), 3, cv2.LINE_AA)
+
+        #gauss = cv2.GaussianBlur(thresh1, (5, 5), 0)
+
+        ret, thresh2 = cv2.threshold(thresh1, thresh2_low, thresh2_maxVal, thresh_type2) # binary
+
+        #maybe do sobel for y only?
+        #edge = cv2.Sobel(thresh2, canny_thresh_lower, canny_thresh_upper)
         edge = cv2.Canny(thresh2, canny_thresh_lower, canny_thresh_upper)
+        lines = cv2.HoughLinesP(edge, 1, np.pi/180, 20, None, 40, 12)
+        saved_lines = []
+        # draw hough lines
+        if lines is not None and len(lines) > 0:
+            min_angle = 85  # 90 - 5
+            max_angle = 95  # 90 + 5
+            for line in lines:
+                x1, y1, x2, y2 = line[0]
+                theta_degrees = np.arctan2(y2 - y1, x2 - x1) * 180 / np.pi
+                if min_angle <= abs(theta_degrees) <= max_angle:
+                    lin = line[0]
+                    saved_lines = line
+                    cv2.line(grey_copy, (lin[0], lin[1]), (lin[2], lin[3]), (0,0,255), 3, cv2.LINE_AA)
 
         if show == True:
             cv2.imshow('threshold type 1', thresh1)
             cv2.waitKey(0)  # Wait for any key press to continue to the next image
 
-            cv2.imshow('gauss', gauss)
-            cv2.waitKey(0)  # Wait for any key press to continue to the next image
+            # cv2.imshow('gauss', gauss)
+            # cv2.waitKey(0)  # Wait for any key press to continue to the next image
 
             cv2.imshow('threshold type 2', thresh2)
             cv2.waitKey(0)  # Wait for any key press to continue to the next image
 
             cv2.imshow('Edge', edge)
             cv2.waitKey(0)  # Wait for any key press to continue to the next image
+
+            cv2.imshow('Hough Lines', grey_copy)
+            cv2.waitKey(0)  # Wait for any key press to continue to the next image
      
-        interim_images = [thresh1, gauss, thresh2, edge]
+        interim_images = [thresh1, thresh2, edge, grey_copy, sobel_vert, sobel_grey_copy]
         save_interim_images(interim_images, current_image_index, interim_folder_path)
 
     # 5) detect and collect the weld gap x coordinates
