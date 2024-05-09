@@ -188,7 +188,7 @@ def main():
 
     image_results = []
 
-    source_folder_path = 'WeldGapImages/Set 3'
+    source_folder_path = 'WeldGapImages/Set 1'
     interim_folder_path = 'InterimResults/'
     csv_filename = 'WeldGapPositions.csv'
 
@@ -196,17 +196,24 @@ def main():
     read_type2 = cv2.COLOR_BGR2GRAY
 
     thresh_type1 = cv2.THRESH_TRUNC
-    thresh1_low, thresh1_maxVal = 120, 250 #set1 = 120, 250
+    thresh1_low, thresh1_maxVal = 130, 250 #set1 = 120, 250
 
     thresh_type2 = cv2.THRESH_BINARY
     thresh2_low, thresh2_maxVal = 90, 250 #set1 = 90, 250
 
-    canny_thresh_lower = 100 #set1 = 100
+    canny_thresh_lower = 150 #set1 = 100
     canny_thresh_upper = 200 #set1 = 200
+    canny_hough_thresh = 50
+
+    sobel_low = 200
+    sobel_high = 255
+    sobel_hough_thresh = 70
 
     show = False
 
     sobel = True
+
+    using_hough_lines = False
 
     # 1) set up the interim folder then read source folder content  
     image_list = read_images_from_folder(source_folder_path)
@@ -221,24 +228,29 @@ def main():
     # 2a) scan the zone around the line to get the image average values and try to adjust thresholds
         cropped = crop_roi(initial_image, roi_width, roi_height)
         grey_image = cv2.cvtColor(cropped, read_type2)
+
         grey_copy = np.copy(grey_image)
         sobel_grey_copy = np.copy(grey_image)
 
+        gauss = cv2.GaussianBlur(grey_image, (5, 5), 0)
+
         # also consider cv2.adaptive_tresholding()
-        thresh1_low, thresh2_low = adjust_thresholds(grey_image, thresh1_low, thresh2_low)
+        #thresh1_low, thresh2_low = adjust_thresholds(grey_image, thresh1_low, thresh2_low)
         
     # 3) do lots of processing steps, including saving interim steps
-        ret, thresh1 = cv2.threshold(grey_image, thresh1_low, thresh1_maxVal, thresh_type1) # trunc
+        ret, thresh0 = cv2.threshold(gauss, thresh1_low, thresh1_maxVal, thresh_type1) # trunc
+
+        thresh1 = cv2.adaptiveThreshold(thresh0, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 15, 4)
 
         if sobel == True:
-            sobel_x = cv2.Sobel(grey_image, cv2.CV_64F, 1, 0, ksize=3)
+            sobel_x = cv2.Sobel(thresh1, cv2.CV_64F, 1, 0, ksize=1)
     
             # Convert to absolute values
             abs_sobel_x = cv2.convertScaleAbs(sobel_x)
 
             # Thresholding to isolate strong vertical edges
-            ret, sobel_vert = cv2.threshold(abs_sobel_x, 200, 255, cv2.THRESH_BINARY)
-            sobel_hough = cv2.HoughLinesP(sobel_vert, 1, np.pi/180, 70, None, 20, 12)
+            ret, sobel_vert = cv2.threshold(abs_sobel_x, sobel_low, sobel_high, cv2.THRESH_BINARY)
+            sobel_hough = cv2.HoughLinesP(sobel_vert, 1, np.pi/180, sobel_hough_thresh, None, 20, 2)
 
             sobel_saved_lines = []
             # draw sobel hough lines
@@ -253,14 +265,14 @@ def main():
                         sobel_saved_lines = line
                         cv2.line(sobel_grey_copy, (lin[0], lin[1]), (lin[2], lin[3]), (0,0,255), 3, cv2.LINE_AA)
 
-        #gauss = cv2.GaussianBlur(thresh1, (5, 5), 0)
+        #ret, thresh2 = cv2.threshold(thresh1, thresh2_low, thresh2_maxVal, thresh_type2) # binary
 
-        ret, thresh2 = cv2.threshold(thresh1, thresh2_low, thresh2_maxVal, thresh_type2) # binary
+        #thresh2 = cv2.adaptiveThreshold(thresh1, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
 
         #maybe do sobel for y only?
         #edge = cv2.Sobel(thresh2, canny_thresh_lower, canny_thresh_upper)
-        edge = cv2.Canny(thresh2, canny_thresh_lower, canny_thresh_upper)
-        lines = cv2.HoughLinesP(edge, 1, np.pi/180, 20, None, 40, 12)
+        edge = cv2.Canny(thresh1, canny_thresh_lower, canny_thresh_upper)
+        lines = cv2.HoughLinesP(edge, 1, np.pi/180, canny_hough_thresh, None, 40, 12)
         saved_lines = []
         # draw hough lines
         if lines is not None and len(lines) > 0:
@@ -281,8 +293,8 @@ def main():
             # cv2.imshow('gauss', gauss)
             # cv2.waitKey(0)  # Wait for any key press to continue to the next image
 
-            cv2.imshow('threshold type 2', thresh2)
-            cv2.waitKey(0)  # Wait for any key press to continue to the next image
+            #cv2.imshow('threshold type 2', thresh2)
+            #cv2.waitKey(0)  # Wait for any key press to continue to the next image
 
             cv2.imshow('Edge', edge)
             cv2.waitKey(0)  # Wait for any key press to continue to the next image
@@ -290,20 +302,28 @@ def main():
             cv2.imshow('Hough Lines', grey_copy)
             cv2.waitKey(0)  # Wait for any key press to continue to the next image
      
-        interim_images = [thresh1, thresh2, edge, grey_copy, sobel_vert, sobel_grey_copy]
+        interim_images = [thresh1, sobel_vert, sobel_grey_copy, edge, grey_copy]
         save_interim_images(interim_images, current_image_index, interim_folder_path)
 
     # 5) detect and collect the weld gap x coordinates
-        center_positions = get_canny_line_centers(edge, max_weld_gap, y_scan_location)   
-
-        weld_center = -1
-        valid = 0
-        if len(center_positions) > 0:
-            #weld_center = center_from_canny_pairs(edge, center_positions)
-            weld_center = center_from_darkest_pixel_and_height(thresh1, center_positions)
-            if weld_center[0] != -1:
-                draw_center_line(cropped, weld_center)
-                valid = 1            
+        if not using_hough_lines:
+            center_positions = get_canny_line_centers(edge, max_weld_gap, y_scan_location)   
+            weld_center = -1
+            valid = 0
+            if len(center_positions) > 0:
+                #weld_center = center_from_canny_pairs(edge, center_positions)
+                weld_center = center_from_darkest_pixel_and_height(thresh1, center_positions)
+                if weld_center[0] != -1:
+                    draw_center_line(cropped, weld_center)
+                    valid = 1  
+        else: 
+            weld_center = -1
+            valid = 0
+            if len(sobel_saved_lines) > 0:
+                weld_center = center_from_hough_lines(sobel_saved_lines)
+                if weld_center[0] != -1:
+                    draw_center_line(cropped, weld_center)
+                    valid = 1          
         
         image_results.append(f"Image{current_image_index:04}.jpg,{weld_center},{valid}") # format the results entry
 
