@@ -268,7 +268,7 @@ def main():
 
     image_results = []
 
-    source_folder_path = 'WeldGapImages/Set 3'
+    source_folder_path = 'WeldGapImages/Set 1'
     interim_folder_path = 'InterimResults/'
     csv_filename = 'WeldGapPositions.csv'
 
