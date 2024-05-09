@@ -49,17 +49,17 @@ def adjust_thresholds(cropped, thresh1_low, thresh2_low):
     avg_brightness = np.mean(cropped)
     
     if avg_brightness > 220:  # Image is very bright
-        thresh1_low += 60
-        thresh2_low += 45
-    elif avg_brightness > 180:  # Image is bright
+        thresh1_low += 50
+        thresh2_low += 30
+    elif avg_brightness > 170:  # Image is bright
         thresh1_low += 20
         thresh2_low += 10
     elif avg_brightness < 100:  # Image is dim
         thresh1_low -= 15
-        thresh2_low -= 15
+        thresh2_low -= 5
     elif avg_brightness < 50:  # Image is very dim
-        thresh1_low -= 40
-        thresh2_low -= 40
+        thresh1_low -= 20
+        thresh2_low -= 15
 
     thresh1_low = max(0, thresh1_low)
     thresh2_low = max(0, thresh2_low)
@@ -67,16 +67,32 @@ def adjust_thresholds(cropped, thresh1_low, thresh2_low):
     return thresh1_low, thresh2_low
 
 def group_by_contrast(image):
-    thresholds = [51, 102, 153, 204] 
+    thresholds = [0, 50, 100, 150, 200, 225] 
     result = np.zeros_like(image)
     
     # Assigning new values based on thresholds
     result[image <= thresholds[0]] = 0
-    result[(image > thresholds[0]) & (image <= thresholds[1])] = 51
-    result[(image > thresholds[1]) & (image <= thresholds[2])] = 102
-    result[(image > thresholds[2]) & (image <= thresholds[3])] = 153
-    result[image > thresholds[3]] = 204
+    result[(image > thresholds[0]) & (image <= thresholds[1])] = 25
+    result[(image > thresholds[1]) & (image <= thresholds[2])] = 75
+    result[(image > thresholds[2]) & (image <= thresholds[3])] = 125
+    result[(image > thresholds[3]) & (image <= thresholds[4])] = 175
+    result[(image > thresholds[4]) & (image <= thresholds[5])] = 225
+    result[(image > thresholds[5])] = 255
     return result
+
+def draw_hough_lines(display_image, lines):
+    saved_lines = []
+    if lines is not None and len(lines) > 0:
+        min_angle = 85  # 90 - 5
+        max_angle = 95  # 90 + 5
+        for line in lines:
+            x1, y1, x2, y2 = line[0]
+            theta_degrees = np.arctan2(y2 - y1, x2 - x1) * 180 / np.pi
+            if min_angle <= abs(theta_degrees) <= max_angle:
+                lin = line[0]
+                saved_lines = line
+                cv2.line(display_image, (lin[0], lin[1]), (lin[2], lin[3]), (0,0,255), 3, cv2.LINE_AA)
+    return saved_lines
 
 def abs_to_cropped_coords(image, coords):
     width_ROI = 1000
@@ -99,6 +115,33 @@ def save_interim_images(image_array=[], total_image_count=1, folder_path='Interi
         cv2.imwrite(name_string, image)
 
     os.chdir('..')
+
+def check_for_hough_cluster(lines, width_thresh=12):
+    x_positions = []
+    for line in lines:
+        x_positions.append(line[0])
+    x_positions.sort()
+    
+    clusters = []
+    current_cluster = [x_positions[0]]
+    
+    for x in x_positions[1:]:
+        if x - current_cluster[0] <= width_thresh:
+            current_cluster.append(x)
+        else:
+            if len(current_cluster) > 1:
+                clusters.append(current_cluster)
+            current_cluster = [x]
+    
+    # Add the last cluster
+    if len(current_cluster) > 1:
+        clusters.append(current_cluster)
+
+    if len(clusters) == 1:
+        return np.mean(clusters[0])
+    else:
+        return -1
+    
 
 def get_canny_line_centers(image, max_gap, y_location=70):
         x_positions = []
@@ -164,6 +207,20 @@ def center_from_darkest_pixel_and_height(edge, centers):
 
     return best_center
 
+def center_from_darkest_hough_line(array, lines):
+    darkest_line = 256
+    best_point = (-1,-1,-1)
+    valid = 0
+    for line in lines:
+        x1, y1, x2, y2 = line[0]
+        if (y1 <= 70 <= y2) or (y2 <= 70 <= y1):
+            if array[70,x1] < darkest_line:
+                darkest_line = array[70,x1]
+                best_point = (x1,70,7)
+    if best_point[0] != -1:
+        valid = 1
+    return best_point, valid
+
 def draw_center_line(array, weld_center):
     # draw main line
     line_color = (120, 255, 0)  # Green color in BGR format
@@ -200,7 +257,7 @@ def main():
 
     image_results = []
 
-    source_folder_path = 'WeldGapImages/Set 2'
+    source_folder_path = 'WeldGapImages/Set 1'
     interim_folder_path = 'InterimResults/'
     csv_filename = 'WeldGapPositions.csv'
 
@@ -213,11 +270,11 @@ def main():
     thresh_type2 = cv2.THRESH_BINARY
     thresh2_low, thresh2_maxVal = 90, 250 #set1 = 90, 250
 
-    canny1_thresh_lower = 100 #set1 = 100
-    canny1_thresh_upper = 200 #set1 = 200
+    canny1_thresh_lower = 150 #set1 = 100 - not for hough
+    canny1_thresh_upper = 250 #set1 = 200 - not for hough
 
-    canny2_thresh_lower = 100 #set1 = 100
-    canny2_thresh_upper = 200 #set1 = 200
+    canny2_thresh_lower = 150 #set1 = 100
+    canny2_thresh_upper = 250 #set1 = 200
 
     show = False
 
@@ -236,33 +293,39 @@ def main():
     # 2a) scan the zone around the line to get the image average values and try to adjust thresholds
         cropped = crop_roi(initial_image, roi_width, roi_height)
         grey_image = cv2.cvtColor(cropped, read_type2)
+        grey_copy = np.copy(grey_image)
 
         thresh1_low, thresh2_low = adjust_thresholds(grey_image, thresh1_low, thresh2_low)
         
     # 3) do lots of processing steps, including saving interim steps
         gauss = cv2.GaussianBlur(grey_image, (5, 5), 0)
 
-        grouped = group_by_contrast(gauss)
+        clahe_param = cv2.createCLAHE(clipLimit=1.0, tileGridSize=(10, 10))
+        contrast = clahe_param.apply(gauss)
+
+        grouped = group_by_contrast(contrast)
+
+        edge2 = cv2.Canny(grouped, canny2_thresh_lower, canny2_thresh_upper)
+
+        lines = cv2.HoughLinesP(edge2, 1, np.pi/180, 50, None, 40, 12)
+        saved_lines = draw_hough_lines(grey_copy, lines)
 
         #ret, thresh1 = cv2.threshold(grouped, thresh1_low, thresh1_maxVal, thresh_type1) # trunc - currently redundant
 
-        ret, thresh2 = cv2.threshold(grouped, thresh2_low, thresh2_maxVal, thresh_type2) # binary
+        ret, thresh2 = cv2.threshold(contrast, thresh2_low, thresh2_maxVal, thresh_type2) # binary
 
         edge1 = cv2.Canny(thresh2, canny1_thresh_lower, canny1_thresh_upper)
-        edge2 = cv2.Canny(grouped, canny2_thresh_lower, canny2_thresh_upper)
-
-        hough1 = cv2.HoughLinesP()
      
-        interim_images = [grouped, thresh2, edge1, edge2]
+        interim_images = [contrast, thresh2, edge1, edge2, grey_copy]
         save_interim_images(interim_images, current_image_index, interim_folder_path)
 
     # 5) detect and collect the weld gap x coordinates
         valid1 = 0
-        weld_center1 = -1
+        weld_center1 = (-1,-1,-1) #(x,y,width)
         center_positions1 = get_canny_line_centers(edge1, max_weld_gap, y_scan_location)   
         if len(center_positions1) > 0:
             #weld_center = center_from_canny_pairs(edge, center_positions)
-            weld_center1 = center_from_darkest_pixel_and_height(gauss, center_positions1)
+            weld_center1 = center_from_darkest_pixel_and_height(contrast, center_positions1)
             if weld_center1[0] != -1:
                 valid1 = 1
 
@@ -271,26 +334,38 @@ def main():
             weld_center2 = -1
             center_positions2 = get_canny_line_centers(edge2, max_weld_gap, y_scan_location)   
             if len(center_positions2) > 0:
-                weld_center2 = center_from_darkest_pixel_and_height(gauss, center_positions2) # use gauss or thresh1
+                weld_center2 = center_from_darkest_pixel_and_height(contrast, center_positions2) # use gauss or thresh1
                 if weld_center2[0] != -1:
                     valid2 = 1
-                
+
         if valid1:
             draw_center_line(cropped, weld_center1)
-            image_results.append(f"Image{current_image_index:04}.jpg,{weld_center1},{valid1}") # format the results entry
+            image_results.append(f"Image{current_image_index:04}.jpg,{weld_center1[0]},{valid1}") # format the results entry
         elif valid2:
             draw_center_line(cropped, weld_center2)
-            image_results.append(f"Image{current_image_index:04}.jpg,{weld_center2},{valid2}")
+            image_results.append(f"Image{current_image_index:04}.jpg,{weld_center2[0]},{valid2}")
+        elif saved_lines is not None and len(saved_lines) > 0:
+            # single hough cluster method
+            x_cluster = check_for_hough_cluster(saved_lines)
+            if x_cluster != -1:
+                draw_center_line(cropped, (x_cluster,70,7))
+                image_results.append(f"Image{current_image_index:04}.jpg,{x_cluster},{1}")
+
+            # best hough method
+            weld_center3, valid3 = center_from_darkest_hough_line(contrast, lines)
+            if valid3:
+                draw_center_line(cropped, weld_center3)
+            image_results.append(f"Image{current_image_index:04}.jpg,{weld_center3[0]},{valid3}")
         else:
-            image_results.append(f"Image{current_image_index:04}.jpg,{weld_center1},{valid1}")
+            image_results.append(f"Image{current_image_index:04}.jpg,{weld_center1[0]},{valid1}")
 
     # 6) at the end of the loop, write the CSV and final image
         write_csv(image_results, csv_filename)
         save_final_image(cropped, current_image_index, interim_folder_path)
 
         if show == True:
-            cv2.imshow('threshold type 1', thresh1)
-            cv2.waitKey(0)  # Wait for any key press to continue to the next image
+            # cv2.imshow('threshold type 1', thresh1)
+            # cv2.waitKey(0)  # Wait for any key press to continue to the next image
 
             cv2.imshow('threshold type 2', thresh2)
             cv2.waitKey(0)  # Wait for any key press to continue to the next image
