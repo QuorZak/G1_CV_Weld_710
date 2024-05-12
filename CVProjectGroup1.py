@@ -1,6 +1,8 @@
-###
-
-###
+'''
+This Python files takes in a series of images from a specified folder and reads them using CV2.imread().
+It then attempts to find a narrow, dark, vertical gap in the image which has so far been a weld gap for insutrial purposes.
+It writes the results of the center of these weld gaps as 'x' at y=70 into a CSV. It also saves some interim image results.
+'''
 
 # Import libraries
 import cv2
@@ -9,13 +11,12 @@ import os
 import csv
 
 #############################
-# Create all functions here
+# All functions
 #############################
 
 def read_images_from_folder(folder_path):
     image_files = []
     supported_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.gif']  # Add more extensions if needed
-
     # Iterate over all files in the folder
     for filename in os.listdir(folder_path):
         # Check if the file has a supported image extension
@@ -24,11 +25,9 @@ def read_images_from_folder(folder_path):
             image_path = os.path.join(folder_path, filename)
             # Add the image path to the list
             image_files.append(image_path)
-
-                # Print the list of image files
+    # Print the list of image files
     for image_file in image_files:
         print(image_file)
-
     return image_files
 
 def read_image(image_path, read_type):
@@ -40,36 +39,33 @@ def read_image(image_path, read_type):
 
 def crop_roi(image, width_ROI = 1000, height_ROI = 300):
         mid_point = (int(image.shape[1]/2), 300)
-
         x_roi = max(mid_point[0] - width_ROI // 2, 0)
         y_roi = max(mid_point[1] - height_ROI // 2, 0)
         return image[y_roi:y_roi + height_ROI, x_roi:x_roi + width_ROI]
 
 def adjust_thresholds(cropped, thresh1_low, thresh2_low):
     avg_brightness = np.mean(cropped)
-    
+    # these values were set manually. They're subjective and not perfect
     if avg_brightness > 220:  # Image is very bright
-        thresh1_low += 30
+        thresh1_low += 20
         thresh2_low += 20
     elif avg_brightness > 180:  # Image is bright
-        thresh1_low += 20
+        thresh1_low += 10
         thresh2_low += 10
     elif avg_brightness < 100:  # Image is dim
-        thresh1_low -= 15
+        thresh1_low -= 5
         thresh2_low -= 5
     elif avg_brightness < 50:  # Image is very dim
-        thresh1_low -= 20
+        thresh1_low -= 15
         thresh2_low -= 15
-
+    # avoid setting below 0
     thresh1_low = max(0, thresh1_low)
     thresh2_low = max(0, thresh2_low)
-
     return thresh1_low, thresh2_low
 
 def group_by_contrast(image):
     thresholds = [0, 50, 100, 150, 200, 225] 
     result = np.zeros_like(image)
-    
     # Assigning new values based on thresholds
     result[image <= thresholds[0]] = 0
     result[(image > thresholds[0]) & (image <= thresholds[1])] = 25
@@ -97,7 +93,6 @@ def draw_hough_lines(display_image, lines):
 def abs_to_cropped_coords(image, coords):
     width_ROI = 1000
     #height_ROI = 300
-
     mid_point = (int(image.shape[1]/2), 300)
     x_roi = max(mid_point[0] - width_ROI // 2, 0)
     new_coords = []
@@ -109,22 +104,20 @@ def save_interim_images(image_array=[], total_image_count=1, folder_path='Interi
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
     os.chdir(folder_path)
-
     for interim_count, image in enumerate(image_array):
         name_string = f"Image{total_image_count:04}_B_InterimResult{interim_count+1}.jpg"
         cv2.imwrite(name_string, image)
-
     os.chdir('..')
 
 def check_for_hough_cluster(lines, width_thresh=12):
+    # extract x positions and initalise
     x_positions = []
     for line in lines:
         x_positions.append(line[0])
     x_positions.sort()
-    
     clusters = []
     current_cluster = [x_positions[0]]
-    
+    # get all sequential positions
     for x in x_positions[1:]:
         if x - current_cluster[0] <= width_thresh:
             current_cluster.append(x)
@@ -132,11 +125,10 @@ def check_for_hough_cluster(lines, width_thresh=12):
             if len(current_cluster) > 1:
                 clusters.append(current_cluster)
             current_cluster = [x]
-    
     # Add the last cluster
     if len(current_cluster) > 1:
         clusters.append(current_cluster)
-
+    # if only 1 cluster, return cluster average x
     if len(clusters) == 1:
         return np.mean(clusters[0])
     else:
@@ -149,7 +141,7 @@ def get_canny_line_centers(image, max_gap, lines, y_location=70):
         found_gap = False
         in_white_line = False
         for x_index, pixel_value in enumerate(image[y_location,:]): #just one scan line across y=70
-            if pixel_value >= 250:  # find white lines
+            if pixel_value >= 245:  # find white lines
                 if begin_count == 0 and not in_white_line:
                     begin_count = x_index
                     in_white_line = True
@@ -162,7 +154,7 @@ def get_canny_line_centers(image, max_gap, lines, y_location=70):
                     begin_count = 0
                     found_gap = False
                     in_white_line = True
-            elif pixel_value <= 5:
+            elif pixel_value <= 10: # find black pixels
                 if begin_count != 0 and found_gap == False:
                     found_gap = True
                     in_white_line = False
@@ -249,14 +241,12 @@ def save_final_image(image, total_image_count, folder_path='InterimResults/'):
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
     os.chdir(folder_path)
-
     name_string = f"Image{total_image_count:04}_A_WeldGapPosition.jpg"
     cv2.imwrite(name_string, image)
-
     os.chdir('..')
 
 ###########################################
-# Perform the functions step by step here
+# Main Function
 ###########################################
 def main():
     # Constants and global parameters
@@ -275,11 +265,11 @@ def main():
     read_type1 = cv2.IMREAD_COLOR
     read_type2 = cv2.COLOR_BGR2GRAY
 
-    thresh_type1 = cv2.THRESH_TRUNC
-    thresh1_low, thresh1_maxVal = 120, 250 #set1 = 120, 250
+    thresh_type1 = cv2.THRESH_BINARY
+    thresh1_low, thresh1_maxVal = 75, 250 #set1 = 75, 250
 
-    thresh_type2 = cv2.THRESH_BINARY
-    thresh2_low, thresh2_maxVal = 75, 250 #set1 = 75, 250
+    thresh_type2 = cv2.THRESH_TRUNC
+    thresh2_low, thresh2_maxVal = 120, 250 #set1 = 120, 250
 
     canny1_thresh_lower = 150 #set1 = 150 - not for hough - binary
     canny1_thresh_upper = 250 #set1 = 250 - not for hough - binary
@@ -291,6 +281,9 @@ def main():
 
     using_edge2 = True
 
+    ###########################################
+    # Perform the functions step by step here
+    ###########################################
     # # 1) set up the interim folder then read source folder content  
     image_list = read_images_from_folder(source_folder_path)
 
@@ -318,22 +311,20 @@ def main():
 
         edge2 = cv2.Canny(grouped, canny2_thresh_lower, canny2_thresh_upper)
 
-        #ret, thresh1 = cv2.threshold(grouped, thresh1_low, thresh1_maxVal, thresh_type1) # trunc - currently redundant
+        ret, thresh1 = cv2.threshold(contrast, contrast.min()+(thresh1_low/3), thresh1_maxVal, thresh_type1) # binary
 
-        ret, thresh2 = cv2.threshold(contrast, contrast.min()+(thresh2_low/3), thresh2_maxVal, thresh_type2) # binary
-
-        edge1 = cv2.Canny(thresh2, canny1_thresh_lower, canny1_thresh_upper)
+        edge1 = cv2.Canny(thresh1, canny1_thresh_lower, canny1_thresh_upper)
 
         lines = cv2.HoughLinesP(edge1, 1, np.pi/180, 50, None, 40, 12)
         saved_lines = draw_hough_lines(grey_copy, lines)
 
-        interim_images = [contrast, thresh2, edge1, grouped, edge2, grey_copy]
+        interim_images = [contrast, thresh1, edge1, grouped, edge2, grey_copy]
         save_interim_images(interim_images, current_image_index, interim_folder_path)
 
     # 5) detect and collect the weld gap x coordinates
         valid1 = 0
         weld_center1 = (-1,-1,-1) #(x,y,width)
-        center_positions1 = get_canny_line_centers(edge1, max_weld_gap, saved_lines, y_scan_location) #binary  
+        center_positions1 = get_canny_line_centers(edge1, max_weld_gap, saved_lines, y_scan_location) #binary
         if len(center_positions1) > 0:
             #weld_center = center_from_canny_pairs(edge, center_positions)
             weld_center1 = center_from_darkest_pixel_and_height(contrast, center_positions1)
@@ -345,10 +336,11 @@ def main():
             weld_center2 = -1
             center_positions2 = get_canny_line_centers(edge2, max_weld_gap, saved_lines, y_scan_location) #groups
             if len(center_positions2) > 0:
-                weld_center2 = center_from_darkest_pixel_and_height(contrast, center_positions2) # use gauss or thresh1
+                weld_center2 = center_from_darkest_pixel_and_height(contrast, center_positions2) # use gauss or contrast
                 if weld_center2[0] != -1:
                     valid2 = 1
 
+        # final decision making
         if valid1:
             draw_center_line(cropped, weld_center1)
             image_results.append(f"Image{current_image_index:04}.jpg,{weld_center1[0]},{valid1}") # format the results entry
@@ -362,9 +354,9 @@ def main():
                 draw_center_line(cropped, (x_cluster,70,7))
                 image_results.append(f"Image{current_image_index:04}.jpg,{x_cluster},{1}")
 
-            # best hough method
-            weld_center3, valid3 = center_from_darkest_hough_line(contrast, lines)
-            if valid3:
+            # best guess hough method
+            elif valid3:
+                weld_center3, valid3 = center_from_darkest_hough_line(contrast, lines)
                 draw_center_line(cropped, weld_center3)
             image_results.append(f"Image{current_image_index:04}.jpg,{weld_center3[0]},{valid3}")
         else:
@@ -375,11 +367,11 @@ def main():
         save_final_image(cropped, current_image_index, interim_folder_path)
 
         if show == True:
-            # cv2.imshow('threshold type 1', thresh1)
-            # cv2.waitKey(0)  # Wait for any key press to continue to the next image
-
-            cv2.imshow('threshold type 2', thresh2)
+            cv2.imshow('threshold type 1', thresh1)
             cv2.waitKey(0)  # Wait for any key press to continue to the next image
+
+            # cv2.imshow('threshold type 2', thresh2)
+            # cv2.waitKey(0)  # Wait for any key press to continue to the next image
 
             cv2.imshow('Edge', edge1)
             cv2.waitKey(0)  # Wait for any key press to continue to the next image
