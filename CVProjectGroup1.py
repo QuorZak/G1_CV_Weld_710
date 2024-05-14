@@ -258,7 +258,7 @@ def main():
 
     image_results = []
 
-    source_folder_path = 'WeldGapImages/Set 1'
+    source_folder_path = 'WeldGapImages/Set 3'
     interim_folder_path = 'InterimResults/'
     csv_filename = 'WeldGapPositions.csv'
 
@@ -350,13 +350,14 @@ def main():
         elif saved_lines is not None and len(saved_lines) > 0:
             # single hough cluster method
             x_cluster = check_for_hough_cluster(saved_lines)
+            weld_center3, valid3 = center_from_darkest_hough_line(contrast, lines)
             if x_cluster != -1:
                 draw_center_line(cropped, (x_cluster,70,7))
                 image_results.append(f"Image{current_image_index:04}.jpg,{x_cluster},{1}")
 
             # best guess hough method
             elif valid3:
-                weld_center3, valid3 = center_from_darkest_hough_line(contrast, lines)
+                
                 draw_center_line(cropped, weld_center3)
             image_results.append(f"Image{current_image_index:04}.jpg,{weld_center3[0]},{valid3}")
         else:
